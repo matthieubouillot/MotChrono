@@ -17,6 +17,7 @@ function Game() {
   const [timeLeft, setTimeLeft] = useState(120);
   const [hasReceivedRound, setHasReceivedRound] = useState(false);
   const [waitingForOthers, setWaitingForOthers] = useState(false);
+  const [error, setError] = useState(false);
 
   const navigate = useNavigate();
 
@@ -30,10 +31,15 @@ function Game() {
       setTimeLeft(120);
       setHasReceivedRound(true);
       setWaitingForOthers(false);
+      setError(false);
     };
 
     const handleGameOver = (data) => {
       navigate("/results", { state: { results: data } });
+    };
+
+    const handleWrongAnswer = () => {
+      setError(true);
     };
 
     const handlePlayerFinished = () => {
@@ -42,12 +48,15 @@ function Game() {
 
     socket.on("newRound", handleNewRound);
     socket.on("gameOver", handleGameOver);
+    socket.on("wrongAnswer", handleWrongAnswer);
     socket.on("playerFinished", handlePlayerFinished);
+
     socket.emit("resendCurrentRound");
 
     return () => {
       socket.off("newRound", handleNewRound);
       socket.off("gameOver", handleGameOver);
+      socket.off("wrongAnswer", handleWrongAnswer);
       socket.off("playerFinished", handlePlayerFinished);
     };
   }, [navigate, round]);
@@ -61,7 +70,6 @@ function Game() {
           clearInterval(interval);
           socket.emit("submitAnswer", {
             answer: "",
-            time: 120,
             timeout: true,
           });
           return 0;
@@ -76,11 +84,11 @@ function Game() {
   const handleSubmit = () => {
     if (!answer.trim() || round > 5) return;
 
-    const timeTaken = Math.floor((Date.now() - startTime) / 1000);
+    const timeUsed = 120 - timeLeft;
 
     socket.emit("submitAnswer", {
       answer: answer.trim(),
-      time: timeTaken,
+      time: timeUsed,
     });
 
     setAnswer("");
@@ -90,8 +98,12 @@ function Game() {
     return (
       <div className="min-h-screen flex items-center justify-center px-4 text-center bg-gradient-to-b from-white to-gray-100">
         <div className="max-w-md w-full p-6 bg-white rounded-2xl shadow-md animate-pulse">
-          <h1 className="text-2xl font-bold text-green-600 mb-2">✅ Partie terminée !</h1>
-          <p className="text-gray-500 text-md">En attente des autres joueurs...</p>
+          <h1 className="text-2xl font-bold text-green-600 mb-2">
+            ✅ Partie terminée !
+          </h1>
+          <p className="text-gray-500 text-md">
+            En attente des autres joueurs...
+          </p>
         </div>
       </div>
     );
@@ -100,7 +112,9 @@ function Game() {
   return (
     <div className="min-h-screen flex items-center justify-center px-4 text-center bg-gradient-to-b from-white to-gray-100">
       <div className="max-w-md w-full bg-white p-6 rounded-2xl shadow-md space-y-5">
-        <h1 className="text-2xl font-bold text-indigo-700">🧠 Manche {round} / 5</h1>
+        <h1 className="text-2xl font-bold text-indigo-700">
+          🧠 Manche {round} / 5
+        </h1>
 
         {!hasReceivedRound ? (
           <p className="text-gray-500">🔄 En attente du mot mélangé...</p>
@@ -115,22 +129,39 @@ function Game() {
 
             <div className="text-gray-600">
               ⏱ Temps restant :
-              <span className="ml-1 font-semibold text-red-500">{formatTime(timeLeft)}</span>
+              <span className="ml-1 font-semibold text-red-500">
+                {formatTime(timeLeft)}
+              </span>
             </div>
 
             <input
               type="text"
               value={answer}
-              onChange={(e) => setAnswer(e.target.value)}
+              onChange={(e) => {
+                setAnswer(e.target.value);
+                setError(false);
+              }}
               placeholder={`Mot de ${originalLength} lettres`}
-              className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-center"
+              className={`w-full px-4 py-2 border ${
+                error ? "border-red-500" : "border-gray-300"
+              } rounded-xl focus:outline-none focus:ring-2 ${
+                error ? "focus:ring-red-500" : "focus:ring-indigo-500"
+              } text-center`}
+              disabled={timeLeft <= 0}
             />
+
+            {error && (
+              <p className="text-sm text-red-500">
+                ❌ Mauvaise réponse, essaie encore !
+              </p>
+            )}
 
             <button
               onClick={handleSubmit}
               className="w-full py-2 bg-green-600 text-white rounded-xl font-semibold text-lg shadow hover:bg-green-700 transition"
+              disabled={timeLeft <= 0}
             >
-               Valider
+              Valider
             </button>
           </>
         )}

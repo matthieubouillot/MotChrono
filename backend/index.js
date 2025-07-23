@@ -34,15 +34,17 @@ function sendNextRound(socket, roomId) {
   const roundData = room.rounds[player.round - 1];
   if (!roundData) return;
 
+  player.startTime = Date.now();
+
   socket.emit("newRound", {
     round: player.round,
     shuffled: roundData.shuffled,
     originalLength: roundData.original.length,
+    // NE PAS ENVOYER LA SOLUTION AU CLIENT
   });
 }
 
 io.on("connection", (socket) => {
-
   socket.on("createRoom", ({ pseudo }, callback) => {
     const roomId = createRoom(socket, pseudo);
     socketToRoom[socket.id] = roomId;
@@ -93,6 +95,7 @@ io.on("connection", (socket) => {
         responses: [],
         times: [],
         answeredRounds: new Set(),
+        startTime: null,
       };
     });
 
@@ -102,7 +105,7 @@ io.on("connection", (socket) => {
     });
   });
 
-  socket.on("submitAnswer", ({ time, answer }) => {
+  socket.on("submitAnswer", ({ answer, time, timeout }) => {
     const roomId = findRoomForSocket(socket.id);
     if (!roomId || !gameState[roomId]) return;
 
@@ -112,53 +115,63 @@ io.on("connection", (socket) => {
 
     const roundIndex = progress.round - 1;
     if (progress.answeredRounds.has(roundIndex)) return;
-    progress.answeredRounds.add(roundIndex);
 
     const roundData = state.rounds[roundIndex];
-    progress.responses[roundIndex] = answer;
+    const correct = answer.trim().toLowerCase() === roundData.original.toLowerCase();
 
-    const correct = answer.toLowerCase() === roundData.original.toLowerCase();
-    const timeout = time >= 120;
+    // On fait confiance au temps envoyé par le front, en le sécurisant
+    const timeTaken = timeout
+      ? 120
+      : Math.min(120, Math.max(0, typeof time === "number" ? time : 0));
 
-    const roundTime = correct ? time : 120;
-    progress.times[roundIndex] = roundTime;
-    progress.totalTime += roundTime;
-    progress.round++;
+    if (correct || timeout) {
+      progress.responses[roundIndex] = correct ? answer.trim() : "⏱ Temps écoulé";
+      progress.times[roundIndex] = timeTaken;
+      progress.totalTime += timeTaken;
+      progress.answeredRounds.add(roundIndex);
+      progress.round++;
 
-    if (progress.round > 5) {
-      progress.finished = true;
+      if (progress.round > 5) {
+        progress.finished = true;
 
-      const finishedPlayerData = {
-        pseudo: state.players.find((p) => p.id === socket.id)?.pseudo,
-        total: progress.totalTime,
-        responses: progress.responses,
-        times: progress.times,
-      };
+        const finishedPlayerData = {
+          pseudo: state.players.find((p) => p.id === socket.id)?.pseudo,
+          total: progress.totalTime,
+          responses: progress.responses,
+          times: progress.times,
+        };
 
-      const existing = state.finishedPlayers.findIndex(p => p.pseudo === finishedPlayerData.pseudo);
-      if (existing !== -1) state.finishedPlayers[existing] = finishedPlayerData;
-      else state.finishedPlayers.push(finishedPlayerData);
-
-      const correctAnswers = state.rounds.map((r) => r.original);
-
-      socket.emit("gameOver", {
-        results: state.finishedPlayers.sort((a, b) => a.total - b.total),
-        correctAnswers,
-      });
-
-      state.players.forEach((p) => {
-        if (p.id !== socket.id && playerProgress[p.id]?.finished) {
-          const ps = io.sockets.sockets.get(p.id);
-          if (ps) {
-            ps.emit("gameOver", {
-              results: state.finishedPlayers.sort((a, b) => a.total - b.total),
-              correctAnswers,
-            });
-          }
+        const existing = state.finishedPlayers.findIndex((p) => p.pseudo === finishedPlayerData.pseudo);
+        if (existing !== -1) {
+          state.finishedPlayers[existing] = finishedPlayerData;
+        } else {
+          state.finishedPlayers.push(finishedPlayerData);
         }
-      });
+
+        const correctAnswers = state.rounds.map((r) => r.original);
+
+        socket.emit("gameOver", {
+          results: state.finishedPlayers.sort((a, b) => a.total - b.total),
+          correctAnswers,
+        });
+
+        // Notifie les autres joueurs déjà terminés
+        state.players.forEach((p) => {
+          if (p.id !== socket.id && playerProgress[p.id]?.finished) {
+            const ps = io.sockets.sockets.get(p.id);
+            if (ps) {
+              ps.emit("gameOver", {
+                results: state.finishedPlayers.sort((a, b) => a.total - b.total),
+                correctAnswers,
+              });
+            }
+          }
+        });
+      } else {
+        sendNextRound(socket, roomId);
+      }
     } else {
-      sendNextRound(socket, roomId);
+      socket.emit("wrongAnswer");
     }
   });
 
@@ -187,4 +200,5 @@ io.on("connection", (socket) => {
 
 const PORT = process.env.PORT || 3001;
 server.listen(PORT, () => {
+  console.log(`✅ Backend running on port ${PORT}`);
 });
