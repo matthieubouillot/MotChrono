@@ -27,7 +27,7 @@ function Game() {
       setOriginalLength(originalLength);
       setAnswer("");
       setStartTime(Date.now());
-      setTimeLeft(10);
+      setTimeLeft(120);
       setHasReceivedRound(true);
       setWaitingForOthers(false);
     };
