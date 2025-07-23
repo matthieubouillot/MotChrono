@@ -54,7 +54,7 @@ function Results() {
             {results.map((r, index) => (
               <li
                 key={r.pseudo}
-                className={`p-4 md:p-6 rounded-xl shadow-md transition-all ${
+                className={`p-4 md:p-6 rounded-xl shadow-md transition-all mx-auto max-w-full ${
                   index === 0
                     ? "bg-yellow-100 border border-yellow-400 font-bold scale-[1.01]"
                     : "bg-white"
@@ -67,9 +67,9 @@ function Results() {
                   ⏱ Temps total : <strong>{formatTime(r.total)}</strong>
                 </p>
 
-                <div className="mt-3 text-left">
+                <div className="mt-3 text-left sm:text-center">
                   <p className="font-semibold text-sm mb-1">Réponses données :</p>
-                  <ul className="list-disc list-inside text-sm text-gray-700">
+                  <ul className="list-disc list-inside text-sm text-gray-700 text-left sm:text-center">
                     {r.responses?.map((resp, i) => (
                       <li key={i}>
                         Manche {i + 1} :{" "}
@@ -97,9 +97,9 @@ function Results() {
       )}
 
       {correctAnswers.length > 0 && (
-        <div className="mt-10 w-full max-w-3xl bg-white p-4 md:p-6 rounded-xl shadow text-left">
+        <div className="mt-10 w-full max-w-3xl bg-white p-4 md:p-6 rounded-xl shadow mx-auto text-left sm:text-center">
           <h2 className="text-base md:text-lg font-semibold text-indigo-600 mb-2">🧠 Bonnes réponses :</h2>
-          <ul className="list-disc list-inside text-sm text-gray-800">
+          <ul className="list-disc list-inside text-sm text-gray-800 text-left sm:text-center">
             {correctAnswers.map((w, i) => (
               <li key={i}>
                 Manche {i + 1} : <strong>{w}</strong>
